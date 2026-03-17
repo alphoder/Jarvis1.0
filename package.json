@@ -1,0 +1,19 @@
+{
+  "name": "jarvis-3d-engine",
+  "version": "1.0.0",
+  "description": "High-performance browser-based 3D engine with physics",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mediapipe/hands": "^0.4.1675469240",
+    "cannon-es": "^0.20.0",
+    "three": "^0.183.2"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}

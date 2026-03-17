@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jarvis 3D Engine</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow: hidden;
+      background: #0a0a0a;
+      color: #e0e0e0;
+    }
+
+    #canvas {
+      display: block;
+      width: 100%;
+      height: 100vh;
+    }
+
+    #ui-panel {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      padding: 20px;
+      font-size: 14px;
+      font-family: 'Courier New', monospace;
+      max-width: 300px;
+      backdrop-filter: blur(10px);
+      z-index: 100;
+    }
+
+    .ui-section {
+      margin-bottom: 20px;
+    }
+
+    .ui-section h3 {
+      color: #64b5f6;
+      margin-bottom: 10px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .ui-stat {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+
+    .ui-stat-label {
+      color: #90caf9;
+    }
+
+    .ui-stat-value {
+      color: #fff;
+      font-weight: bold;
+    }
+
+    .ui-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    button {
+      background: rgba(100, 181, 246, 0.2);
+      border: 1px solid rgba(100, 181, 246, 0.5);
+      color: #64b5f6;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: bold;
+      text-transform: uppercase;
+      transition: all 0.2s ease;
+      font-family: 'Courier New', monospace;
+    }
+
+    button:hover {
+      background: rgba(100, 181, 246, 0.4);
+      border-color: rgba(100, 181, 246, 1);
+      box-shadow: 0 0 10px rgba(100, 181, 246, 0.3);
+    }
+
+    button:active {
+      transform: scale(0.95);
+    }
+
+    .gravity-controls {
+      display: flex;
+      gap: 4px;
+    }
+
+    .gravity-controls button {
+      flex: 1;
+      font-size: 10px;
+      padding: 6px 8px;
+    }
+
+    #info-text {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      padding: 15px;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+      max-width: 400px;
+      backdrop-filter: blur(10px);
+      line-height: 1.6;
+      color: #90caf9;
+    }
+
+    #error-message {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 0, 0, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      padding: 15px;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+      max-width: 400px;
+      backdrop-filter: blur(10px);
+      line-height: 1.6;
+      color: #fff;
+      display: none;
+      z-index: 101;
+    }
+
+    #voice-command {
+      position: absolute;
+      top: 80px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      padding: 15px;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+      max-width: 400px;
+      backdrop-filter: blur(10px);
+      line-height: 1.6;
+      color: #fff;
+      display: none;
+      z-index: 101;
+    }
+  </style>
+</head>
+<body>
+  <video id="videoElement" autoplay playsinline muted style="position:fixed;top:0;left:0;width:100vw;height:100vh;object-fit:cover;z-index:0;"></video>
+  <canvas id="canvas" style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1;pointer-events:none;"></canvas>
+  <div id="ui-panel">
+    <div class="ui-section">
+      <h3>Engine Status</h3>
+      <div class="ui-stat">
+        <span class="ui-stat-label">FPS:</span>
+        <span class="ui-stat-value" id="fps">60</span>
+      </div>
+      <div class="ui-stat">
+        <span class="ui-stat-label">Objects:</span>
+        <span class="ui-stat-value" id="object-count">0</span>
+      </div>
+      <div class="ui-stat">
+        <span class="ui-stat-label">Gravity:</span>
+        <span class="ui-stat-value" id="gravity-value">9.8</span>
+      </div>
+    </div>
+
+    <div class="ui-section">
+      <h3>Create Objects</h3>
+      <div class="ui-buttons">
+        <button id="btn-cube">Add Cube</button>
+        <button id="btn-sphere">Add Sphere</button>
+        <button id="btn-delete">Delete Last</button>
+      </div>
+    </div>
+
+    <div class="ui-section">
+      <h3>Physics Controls</h3>
+      <div class="ui-buttons">
+        <button id="btn-toggle-gravity">Toggle Gravity</button>
+        <button id="btn-voice">Start Voice</button>
+      </div>
+      <div class="gravity-controls" style="margin-top: 8px;">
+        <button id="btn-gravity-down">Decrease</button>
+        <button id="btn-gravity-up">Increase</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="ui" style="position:absolute;top:10px;left:10px;z-index:10;pointer-events:none;">
+    <h2>Gesture Particle System</h2>
+    <p>👋 Move hand to rotate</p>
+    <p>🤏 Pinch thumb & index finger to change shape/color</p>
+    <p>✋ Move hand closer/further to expand/contract</p>
+    <p id="currentShape">Current Shape: Universe</p>
+  </div>
+  <div id="loading" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:24px;">Loading AI Model & Camera...</div>
+  <div id="error-message"></div>
+  <div id="voice-command"></div>
+
+  <div id="info-text">
+    <strong>Jarvis 3D Engine v1.0</strong><br>
+    Three.js + cannon-es Physics<br>
+    <br>
+    <strong>Controls:</strong><br>
+    • Click buttons to interact<br>
+    • Objects affected by gravity<br>
+    • Physics simulation at 60 FPS
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
