@@ -747,6 +747,38 @@ document.addEventListener('mousedown', () => { mouse.isDown = true; });
 document.addEventListener('mouseup', () => { mouse.isDown = false; });
 
 // ═══════════════════════════════════════════
+//  NEURAL INTERFACE (GUI)
+// ═══════════════════════════════════════════
+const niOverlay = document.getElementById('neural-interface');
+const niClose = document.getElementById('ni-close');
+const niBtnNav = document.getElementById('ni-btn-nav');
+
+function toggleNeuralInterface(force) {
+  const isActive = force !== undefined ? force : niOverlay?.classList.contains('active');
+  if (isActive) {
+    niOverlay?.classList.remove('active');
+  } else {
+    niOverlay?.classList.add('active');
+    // Clear keyboard buffer when menu opens to prevent overlap
+    cheatBuffer = ''; 
+  }
+}
+
+niBtnNav?.addEventListener('click', () => toggleNeuralInterface(false));
+niClose?.addEventListener('click', () => toggleNeuralInterface(true));
+
+// Card interactions
+document.querySelectorAll('.ni-card').forEach(card => {
+  card.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const cheat = card.getAttribute('data-cheat').toUpperCase();
+    activateCheat(cheat);
+    // Auto-close after short delay for effect
+    setTimeout(() => toggleNeuralInterface(true), 200);
+  });
+});
+
+// ═══════════════════════════════════════════
 //  KEYBOARD — shapes + cheats
 // ═══════════════════════════════════════════
 document.addEventListener('keydown', (e) => {
@@ -763,6 +795,14 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 'm' || e.key === 'M') {
     toggleAudio();
+    return;
+  }
+  if (e.key === 'c' || e.key === 'C') {
+    toggleNeuralInterface();
+    return;
+  }
+  if (e.key === 'Escape') {
+    toggleNeuralInterface(true);
     return;
   }
 
