@@ -1,0 +1,752 @@
+================================================================================
+                        JARVIS 1.0 — PROJECT DOCUMENTATION
+                  Browser-Based 3D Physics Engine with AI Controls
+================================================================================
+
+Created: March 2024
+Version: 1.0.0
+License: MIT
+Package Name: jarvis-3d-engine
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+Jarvis 1.0 is a high-performance, browser-native 3D physics simulation engine
+that runs entirely on the client side. It combines real-time 3D rendering,
+rigid-body physics simulation, webcam-based hand gesture recognition, GPU-driven
+particle effects, and voice command processing into a single cohesive
+interactive experience.
+
+The application overlays a transparent Three.js WebGL scene on top of a live
+webcam feed, creating an augmented-reality-like experience where the user can
+spawn physics objects, manipulate them with hand gestures captured via the
+webcam, and scatter/reassemble a particle cloud — all within the browser.
+
+Target Use Cases:
+  - Educational physics demonstrations
+  - Interactive art installations
+  - Game prototyping and experimentation
+  - Virtual particle system manipulation
+  - Gesture-controlled applications
+
+================================================================================
+2. TECHNOLOGY STACK
+================================================================================
+
+Runtime:
+  - Vanilla JavaScript (ES6+ modules, no frameworks)
+  - HTML5 / CSS3 (inline in index.html, glassmorphism design)
+
+Rendering & 3D:
+  - Three.js r183            — WebGL-based 3D scene rendering, cameras, lighting
+  - EffectComposer            — Post-processing pipeline (Unreal Bloom pass)
+
+Physics:
+  - Cannon-ES 0.20            — Rigid-body dynamics, gravity, collisions
+
+Hand Tracking:
+  - MediaPipe Hands 0.4       — Real-time 21-landmark hand detection via webcam
+  - Loaded at runtime from CDN (cdn.jsdelivr.net)
+
+Voice:
+  - Web Speech API (SpeechRecognition) — Browser-native voice command parsing
+
+Build Tooling:
+  - Vite 5.0                  — Dev server (HMR) and production bundler
+  - Node.js >= 14             — Required for npm/vite
+
+================================================================================
+3. DIRECTORY STRUCTURE
+================================================================================
+
+Jarvis1.0/
+├── .git/                          Git repository metadata
+├── .gitignore                     Ignore rules (node_modules, dist, media, etc.)
+├── README.md                      Full project README (353 lines)
+├── index.html                     HTML entry point + embedded CSS (230 lines)
+├── package.json                   NPM manifest (three, cannon-es, @mediapipe/hands)
+├── package-lock.json              Dependency lock file
+├── vite.config.js                 Vite config (port 3000, esnext target)
+├── dist/                          Production build output (vite build)
+├── node_modules/                  Installed dependencies
+└── src/
+    ├── config.js                  Global configuration (hand tracker smoothing)
+    ├── main.js                    Application entry point & orchestration (379 lines)
+    ├── core/
+    │   ├── renderer.js            Three.js renderer, camera, lighting, bloom (151 lines)
+    │   ├── scene.js               Object creation, physics sync, gravity API (114 lines)
+    │   └── physics.js             Cannon-ES world, ground plane, gravity control (119 lines)
+    ├── hand/
+    │   ├── handTracker.js         MediaPipe integration, landmark processing (139 lines)
+    │   ├── gestureDetector.js     Gesture state machine (pinch/fist/open) (96 lines)
+    │   └── mediapipe-hands.js     MediaPipe support file
+    ├── particles/
+    │   ├── particleSystem.js      GPU particle management, 5000 particles (99 lines)
+    │   └── particleShaders.js     GLSL vertex & fragment shaders (88 lines)
+    └── voice/
+        └── speechController.js    Web Speech API, command mapping (117 lines)
+
+Total source files: 11 (excluding mediapipe-hands.js support file)
+Approximate total lines of code: ~1,400
+
+================================================================================
+4. DETAILED FILE-BY-FILE BREAKDOWN
+================================================================================
+
+--------------------------------------------------------------------------------
+4.1  index.html  (230 lines)
+--------------------------------------------------------------------------------
+
+The single HTML page that hosts the entire application. Key elements:
+
+  DOM Structure:
+    - <video id="videoElement">     Full-viewport webcam background (z-index 0)
+    - <canvas id="canvas">          Three.js overlay, transparent (z-index 1)
+    - <div id="ui-panel">           Control panel (top-left, glassmorphism)
+      - Engine Status section       Shows FPS, object count, gravity
+      - Create Objects section      "Add Cube", "Add Sphere", "Delete Last" buttons
+      - Physics Controls section    "Toggle Gravity", "Start Voice", gravity +/- 
+    - <div id="ui">                 Gesture instruction overlay
+    - <div id="loading">            "Loading AI Model & Camera..." spinner
+    - <div id="error-message">      Red error banner (hidden by default)
+    - <div id="voice-command">      Voice command feedback (hidden by default)
+    - <div id="info-text">          Bottom-right info panel
+
+  Embedded CSS (~160 lines):
+    - Dark theme: body background #0a0a0a, text #e0e0e0
+    - Glassmorphism panels: rgba backgrounds, backdrop-filter: blur(10px)
+    - Accent color: #64b5f6 (Material Blue 300)
+    - Monospace Courier New for all UI text
+    - Button hover/active micro-animations (scale, glow)
+    - Grid layout for button groups
+    - Responsive full-viewport canvas
+
+  Entry Point:
+    - <script type="module" src="/src/main.js"> loads the application
+
+--------------------------------------------------------------------------------
+4.2  src/config.js  (6 lines)
+--------------------------------------------------------------------------------
+
+Exports a single configuration object:
+
+  config.handTracker.smoothingAlpha = 0.35
+
+This exponential smoothing factor is used by handTracker.js to smooth raw
+MediaPipe landmark positions. Lower values = more smoothing (less jitter but
+more latency). Currently not actively applied (raw values are used directly;
+the smoothing code was simplified to direct assignment).
+
+--------------------------------------------------------------------------------
+4.3  src/main.js  (379 lines)  —  APPLICATION ENTRY POINT
+--------------------------------------------------------------------------------
+
+This is the central orchestrator of the entire application. It:
+
+  1. WEBCAM SETUP (lines 14-23):
+     - Calls navigator.mediaDevices.getUserMedia({ video: true })
+     - Pipes the stream to the <video> element for the AR background
+     - Hides the "Loading" overlay on success
+     - Shows error message if webcam access is denied
+
+  2. CORE ENGINE INITIALIZATION (lines 26-27):
+     - Creates a Renderer instance (Three.js scene + camera + bloom)
+     - Creates a SceneManager instance (physics world + object management)
+
+  3. UI BINDING (lines 30-97):
+     - Connects all 7 buttons to corresponding actions:
+       * "Add Cube" / "Add Sphere" → createObject(type)
+         - Random X/Z position in [-5, 5], Y = 15 (spawns above scene)
+         - Random mass 1-3, friction 0.4, restitution 0.4
+         - Cubes: size 2, color #90caf9 (blue)
+         - Spheres: radius 1-2, color #ffb300 (amber)
+       * "Delete Last" → sceneManager.deleteLastObject()
+       * "Toggle Gravity" → sceneManager.toggleGravity()
+       * "Increase/Decrease" → sceneManager.increaseGravity/decreaseGravity(1)
+     - updateStats() refreshes FPS, object count, gravity labels
+
+  4. HAND TRACKING SYSTEM (lines 99-230):
+     - handInteraction state object tracks:
+       * attachedObject — the physics object currently being held
+       * attachedHand — which hand (0 or 1) is holding it
+       * trackingStable — whether any hands are detected
+
+     - 42 green sphere meshes (2 hands × 21 landmarks) provide visual hand
+       feedback in the 3D scene
+
+     - getFingerWorldPos() converts MediaPipe normalized coordinates to
+       Three.js world space for the index finger tip (landmark #8)
+
+     - attachObjectToHand() finds the nearest physics object within 3.5 units
+       of the palm and locks it to the hand
+
+     - releaseObjectFromHand() applies a velocity impulse (clamped to ±8 m/s)
+       derived from the hand's velocity at release, enabling throw mechanics
+
+     - updateHandInteraction() is called every frame with fresh landmarks:
+       * If GRABBING → attach or follow hand
+       * If RELEASED → throw with velocity impulse
+       * Updates visual landmark sphere positions
+
+  5. PARTICLE SYSTEM (lines 232-233):
+     - Creates a ParticleSystem with 5000 GPU-computed particles in a sphere
+     - Connected to hand gestures via the onResults callback
+
+  6. VOICE COMMAND INTEGRATION (lines 236-274):
+     - handleVoiceCommand() maps 7 string actions to engine operations:
+       * "createCube", "createSphere", "deleteObject"
+       * "turnOffGravity", "increaseGravity"
+       * "scatterParticles", "reassembleParticles"
+     - Voice button toggles SpeechController on click
+
+  7. GESTURE → PARTICLE PIPELINE (lines 276-328):
+     - GestureDetector processes raw landmarks into gesture states
+     - Global gestures (both hands) → scatter/reassemble particles
+     - Local gestures → finger repulsion of nearby particles
+     - Shockwave detection: finger velocity > 2.5 → expanding shockwave sphere
+       that repels particles for 1.2 seconds
+
+  8. ANIMATION LOOP (lines 342-370):
+     - requestAnimationFrame at 60 FPS target
+     - Smooth blend transitions for particle uniforms (lerp factor 0.08)
+     - Physics world steps (sceneManager.update)
+     - Post-processed render via EffectComposer (bloom)
+     - FPS calculation every 500ms
+
+  9. STARTUP (lines 372-378):
+     - ensureWebcamAndStart() awaits webcam, then begins the animation loop
+
+--------------------------------------------------------------------------------
+4.4  src/core/renderer.js  (151 lines)  —  RENDERING ENGINE
+--------------------------------------------------------------------------------
+
+Class: Renderer
+
+  Constructor(canvas):
+    - Creates THREE.WebGLRenderer with:
+      * Antialiasing enabled
+      * Alpha transparency (for AR overlay on webcam)
+      * high-performance GPU preference
+      * Pixel ratio capped at 2x (retina support)
+      * Shadow maps: PCFShadowMap (soft shadows)
+      * Tone mapping: ACES Filmic (cinematic color grading)
+      * Output: sRGB color space
+      * Clear color: fully transparent black
+
+    - Creates THREE.PerspectiveCamera:
+      * FOV: 75°, near: 0.1, far: 1000
+      * Position: (0, 15, 25) looking at origin
+
+    - Sets up lighting:
+      * Ambient light: white, intensity 0.5
+      * Directional light (sun): white, intensity 0.8
+        - Position: (30, 40, 30)
+        - Shadow map: 2048×2048, blur 8 samples
+        - Shadow camera covers -50 to +50 in all directions
+      * Point light (accent): blue #64b5f6, intensity 0.4
+        - Position: (-20, 20, 10)
+        - Shadow map: 1024×1024
+
+    - Creates a ground plane:
+      * 200×200 unit plane at Y = -10
+      * Dark gray #1a1a1a, metalness 0.1, roughness 0.8
+      * Receives shadows
+
+    - Post-processing via EffectComposer:
+      * RenderPass → UnrealBloomPass
+      * Bloom settings: strength 0.18, radius 0.6, threshold 0.01
+      * Creates a subtle glow effect on bright objects
+
+    - Window resize handler updates camera aspect ratio, renderer size,
+      and composer size dynamically
+
+  Public API:
+    - render()         — Renders one frame via the bloom composer
+    - getScene()       — Returns the THREE.Scene
+    - getCamera()      — Returns the THREE.PerspectiveCamera
+    - getRenderer()    — Returns the raw THREE.WebGLRenderer
+
+--------------------------------------------------------------------------------
+4.5  src/core/scene.js  (114 lines)  —  SCENE & OBJECT MANAGER
+--------------------------------------------------------------------------------
+
+Class: SceneManager
+
+  Constructor(renderer):
+    - References the shared Three.js scene and camera from Renderer
+    - Creates a Physics instance (Cannon-ES world)
+    - Maintains an objects[] array of {mesh, body} pairs
+
+  createCube({ size, position, mass, friction, restitution, color }):
+    - Creates a Three.js BoxGeometry + MeshStandardMaterial mesh
+    - Creates a matching Cannon-ES Box body via Physics.createBody()
+    - Adds mesh to scene, pushes {mesh, body} to objects[]
+    - Defaults: size=2, mass=1, friction=0.4, restitution=0.4, color=blue
+
+  createSphere({ radius, position, mass, friction, restitution, color }):
+    - Same pattern as createCube but with SphereGeometry and Cannon Sphere
+    - Spheres use 32×32 segments for smooth rendering
+    - Defaults: radius=1, mass=1, color=amber
+
+  deleteLastObject():
+    - Pops the last object from objects[]
+    - Removes mesh from scene and body from physics world
+
+  toggleGravity() / increaseGravity(amount) / decreaseGravity(amount):
+    - Delegates to Physics class
+
+  getGravity() / getObjectCount():
+    - Simple getters
+
+  update(deltaTime):
+    - Steps the physics world
+    - Syncs every Three.js mesh position/quaternion with its Cannon-ES body
+    - This is the core simulation loop binding
+
+--------------------------------------------------------------------------------
+4.6  src/core/physics.js  (119 lines)  —  PHYSICS WORLD
+--------------------------------------------------------------------------------
+
+Class: Physics
+
+  Constructor(gravityY = -9.8):
+    - Creates a CANNON.World with gravity (0, -9.8, 0)
+    - Default contact material: friction 0.3, restitution 0.3
+    - Sets up a "standard" contact material with:
+      * Friction: 0.4
+      * Restitution: 0.4 (moderate bounce)
+      * Contact equation stiffness: 1e6
+      * Contact equation relaxation: 3
+      * Friction equation stiffness: 1e6
+      * Friction equation relaxation: 3
+    - Creates a static ground plane (infinite, mass=0) at Y = -10
+      rotated to be horizontal
+
+  createBody(shape, mass, position):
+    - Creates a CANNON.Body with the given shape
+    - Linear/angular damping: 0.01 (very low = objects slide freely)
+    - Applies small random angular velocity for visual interest on spawn
+    - Adds body to the world
+
+  update(deltaTime):
+    - world.step(1/60, deltaTime, 3)
+    - Fixed timestep 1/60s, variable deltaTime, max 3 sub-steps
+
+  Gravity Controls:
+    - toggleGravity(): Switches between 0 and baseGravity
+    - increaseGravity(amount): Makes gravity stronger (more negative)
+    - decreaseGravity(amount): Makes gravity weaker (less negative)
+    - getGravity(): Returns current baseGravity value
+    - getGravityStatus(): Returns boolean enabled/disabled
+
+  removeBody(body): Removes a body from the physics world
+
+--------------------------------------------------------------------------------
+4.7  src/hand/handTracker.js  (139 lines)  —  HAND DETECTION
+--------------------------------------------------------------------------------
+
+Class: HandTracker
+
+  Constructor({ onResults }):
+    - Stores the callback for processed hand data
+    - Initializes smoothed/previous landmark arrays for 2 hands
+    - Calls async init()
+
+  init():
+    - Gets reference to the shared <video> element
+    - Loads MediaPipe Hands library from CDN via dynamic <script> injection
+    - Waits for the video element to have a srcObject (webcam stream)
+    - Creates a MediaPipe Hands instance with:
+      * maxNumHands: 2
+      * modelComplexity: 1 (balanced accuracy/speed)
+      * minDetectionConfidence: 0.7
+      * minTrackingConfidence: 0.7
+    - Starts frame processing loop
+
+  startProcessing():
+    - Uses requestAnimationFrame to continuously send video frames to
+      MediaPipe for hand detection
+    - Only processes when video.readyState >= 2 (has enough data)
+
+  handleResults(results):
+    - Receives raw MediaPipe landmarks (21 points per hand, up to 2 hands)
+    - For each hand: copies raw landmarks directly (smoothing disabled)
+    - Calculates per-landmark velocities by comparing current vs previous
+      positions divided by delta time
+    - Calls onResults({ landmarks, velocities, dt })
+
+  Static mapToWorld(lm, camera, width, height):
+    - Converts MediaPipe normalized coordinates [0,1] to Three.js world space:
+      * x: (lm.x - 0.5) * width / 20
+      * y: -(lm.y - 0.5) * height / 20   (inverted Y axis)
+      * z: -lm.z * 10                      (depth)
+    - Returns a THREE.Vector3
+
+--------------------------------------------------------------------------------
+4.8  src/hand/gestureDetector.js  (96 lines)  —  GESTURE STATE MACHINE
+--------------------------------------------------------------------------------
+
+Class: GestureDetector
+Exported Enum: GestureState { IDLE, GRABBING, RELEASED, GLOBAL_SCATTER,
+                               GLOBAL_REASSEMBLE }
+
+  State Machine:
+    - IDLE: Default state, open hand or no hand detected
+    - GRABBING: Thumb + index finger pinch (distance < 0.06 normalized)
+    - RELEASED: Closed fist (middle, ring, pinky tips all < 0.08 from palm)
+    - GLOBAL_SCATTER: Both hands detected, both making fists
+    - GLOBAL_REASSEMBLE: Both hands detected, both open
+
+  Debouncing:
+    - DEBOUNCE_MS = 120ms prevents rapid state flickering
+    - State only changes if 120ms has elapsed since last change
+
+  update(landmarks, velocities):
+    - For each hand (0-1):
+      * Computes pinch distance (thumb tip to index tip)
+      * Computes fist detection (finger tips close to palm base)
+      * Computes palm openness (sum of finger-to-palm distances)
+    - Two-hand gestures take priority:
+      * Both IDLE + both hands visible → GLOBAL_REASSEMBLE
+      * Both RELEASED (fist) + both hands visible → GLOBAL_SCATTER
+    - Single-hand gestures:
+      * Any hand GRABBING → global GRABBING
+      * Any hand RELEASED → global RELEASED
+      * Otherwise → IDLE
+    - Returns the current gesture state
+    - Also stores per-hand states in this.handStates[]
+
+--------------------------------------------------------------------------------
+4.9  src/particles/particleSystem.js  (99 lines)  —  GPU PARTICLE SYSTEM
+--------------------------------------------------------------------------------
+
+Class: ParticleSystem
+Constant: PARTICLE_COUNT = 5000
+
+  Constructor(scene):
+    - Generates 5000 particles distributed on a sphere:
+      * Radius: 8-10 units (random per particle)
+      * Uses spherical coordinate sampling for even distribution
+    - Creates a BufferGeometry with 4 attributes:
+      * position (vec3)         — current particle position
+      * originalPosition (vec3) — spawn position for spring-back
+      * velocity (vec3)         — per-particle velocity
+      * particleIndex (float)   — unique ID 0-4999
+
+    - Defines 13 shader uniforms:
+      * uTime              — global time counter
+      * uBlend             — blend factor for mode transitions
+      * uForceCenter       — center for global scatter/reassemble
+      * uForceRadius (12)  — radius of global force field
+      * uForceStrength (0.8) — global force magnitude
+      * uGlobalMode        — 0=idle, 1=scatter, 2=reassemble
+      * uFingerPos          — finger position in world space
+      * uFingerRadius (3.5) — repulsion radius around finger
+      * uFingerStrength (1.2) — finger repulsion magnitude
+      * uShockwaveTime      — shockwave progress [0-1]
+      * uShockwaveCenter    — shockwave origin
+      * uShockwaveRadius    — expanding shockwave radius
+      * uShockwaveStrength (2.5) — shockwave push force
+
+    - Creates a ShaderMaterial with custom GLSL shaders
+      * Additive blending, transparent, no depth write
+      * Renders as Points (gl_PointSize = 2.0)
+
+  update({ time, globalMode, blend, forceCenter, fingerPos, shockwave }):
+    - Updates all uniforms each frame
+    - Shockwave uniforms reset to 0 when no shockwave is active
+
+--------------------------------------------------------------------------------
+4.10  src/particles/particleShaders.js  (88 lines)  —  GLSL SHADERS
+--------------------------------------------------------------------------------
+
+Vertex Shader (particleVertexShader):
+  - Runs on GPU for each of the 5000 particles every frame
+  - Three behavior modes based on uGlobalMode:
+
+  Mode 0 (Idle):
+    - Velocity damped by 0.98 each frame
+    - Particles slowly settle with minimal drift
+
+  Mode 1 (Scatter — both fists closed):
+    - Pushes particles outward from uForceCenter
+    - Force scales with smoothstep based on distance/radius
+    - Velocity damped by 0.96
+
+  Mode 2 (Reassemble — both palms open):
+    - Spring force pulls particles back to originalPosition
+    - Uses Hooke's law: spring = (original - current) * strength * blend
+    - Velocity damped by 0.92 (stronger damping for convergence)
+
+  Local Finger Repulsion (always active):
+    - If particle is within uFingerRadius of uFingerPos:
+    - Applies radial push away from finger position
+    - Strength falls off with smoothstep
+
+  Shockwave (triggered by fast hand movement):
+    - If uShockwaveTime > 0 and particle within uShockwaveRadius:
+    - Pushes particles radially from shockwave center
+    - Strength decays as shockwave.time approaches 1.0
+    - Creates an expanding ring-like displacement pattern
+
+  Output:
+    - vDistToFinger: distance to finger (passed to fragment shader)
+    - vAlpha: opacity based on finger proximity
+    - gl_PointSize = 2.0 (constant small particles)
+
+Fragment Shader (particleFragmentShader):
+  - Renders each point as a circular disc (discards pixels outside radius 0.5)
+  - Color gradient: blue (0.2, 0.7, 1.0) → gold (1.0, 0.8, 0.2)
+  - Color interpolated by vAlpha
+  - Alpha fades toward edges for soft particle look
+  - Combined with additive blending creates a glowing nebula effect
+
+--------------------------------------------------------------------------------
+4.11  src/voice/speechController.js  (117 lines)  —  VOICE COMMANDS
+--------------------------------------------------------------------------------
+
+Class: SpeechController
+
+  Constructor({ onCommand }):
+    - Stores the command callback
+    - Initializes Web Speech API SpeechRecognition instance
+
+  init():
+    - Checks for browser SpeechRecognition support
+    - Configures recognition:
+      * Continuous mode (doesn't stop after one phrase)
+      * Interim results enabled (low-latency feedback)
+      * Language: en-US
+      * Max alternatives: 1
+    - Auto-restarts on recognition end if still active
+
+  handleResult(event):
+    - Extracts transcript from speech results
+    - Converts to lowercase, trims whitespace
+    - Deduplicates against partialBuffer to prevent double-firing
+    - Shows visual feedback in #voice-command div (3-second display)
+    - Maps recognized text against 7 command patterns:
+      * "create cube"                    → createCube
+      * "create sphere"                  → createSphere
+      * "delete object" / "remove object" → deleteObject
+      * "turn off gravity" / "disable gravity" → turnOffGravity
+      * "increase gravity" / "more gravity"    → increaseGravity
+      * "scatter particles" / "explode particles" → scatterParticles
+      * "reassemble particles" / "gather particles" → reassembleParticles
+    - 800ms debounce prevents duplicate command execution
+
+  Error Handling:
+    - "not-allowed" → shows microphone permission error
+    - Stops recognition on permission denial
+
+  Cleanup:
+    - destroy() method stops recognition and removes event handlers
+
+================================================================================
+5. DATA FLOW & ARCHITECTURE
+================================================================================
+
+The system follows a unidirectional data flow pattern:
+
+  ┌──────────────┐     Video Frames      ┌──────────────────┐
+  │   Webcam     │ ──────────────────────▶│  HandTracker     │
+  │   Stream     │                        │  (MediaPipe)     │
+  └──────────────┘                        └────────┬─────────┘
+                                                   │
+                                          landmarks, velocities, dt
+                                                   │
+                                                   ▼
+  ┌──────────────┐      voice actions     ┌──────────────────┐
+  │  Speech      │ ─────────────────────▶ │  GestureDetector │
+  │  Controller  │                        │  (State Machine) │
+  └──────────────┘                        └────────┬─────────┘
+         │                                         │
+         │                                    gesture states
+         │                                         │
+         ▼                                         ▼
+  ┌────────────────────────────────────────────────────────────┐
+  │                        main.js                              │
+  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐ │
+  │  │ Hand Visual   │  │ Object       │  │ Particle Update  │ │
+  │  │ Feedback      │  │ Attach/Throw │  │ (shockwave, etc) │ │
+  │  └──────┬───────┘  └──────┬───────┘  └────────┬─────────┘ │
+  └─────────┼─────────────────┼───────────────────┼────────────┘
+            │                 │                   │
+            ▼                 ▼                   ▼
+  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────┐
+  │  Renderer    │  │  SceneManager    │  │  ParticleSystem  │
+  │  (Three.js)  │  │  (Scene + Bodies)│  │  (GPU Shaders)   │
+  │  + Bloom     │  │                  │  │                  │
+  └──────┬───────┘  └──────┬───────────┘  └──────────────────┘
+         │                 │
+         │                 ▼
+         │          ┌──────────────┐
+         │          │  Physics     │
+         │          │  (Cannon-ES) │
+         │          └──────────────┘
+         │
+         ▼
+  ┌──────────────┐
+  │  <canvas>    │  ← transparent overlay on <video> webcam
+  └──────────────┘
+
+Animation Loop (60 FPS):
+  1. Physics world steps (1/60s fixed timestep)
+  2. Mesh positions synced from physics bodies
+  3. Hand landmarks processed → gestures detected
+  4. Particle uniforms updated based on gestures
+  5. Scene rendered through bloom post-processing
+  6. FPS counter updated every 500ms
+
+================================================================================
+6. KEY DESIGN DECISIONS
+================================================================================
+
+1. AR-Like Overlay Architecture:
+   - The <video> element fills the viewport behind the canvas
+   - The WebGL renderer uses alpha:true and clearColor(0,0,0,0)
+   - Scene has no background color (null), creating transparency
+   - Objects appear to float in the user's physical space
+
+2. GPU-Driven Particles:
+   - All 5000 particles computed in the vertex shader (no CPU per-particle logic)
+   - Additive blending creates glowing effects without CPU overhead
+   - Multiple force fields (global, finger, shockwave) compose additively
+
+3. Decoupled Input Systems:
+   - Hand tracking and voice commands are independent input paths
+   - Both can control the same actions without conflict
+   - Button UI provides a third fallback input method
+
+4. Physics-Render Synchronization:
+   - Cannon-ES runs at fixed 1/60s with up to 3 sub-steps for stability
+   - Three.js meshes copy position/quaternion from Cannon bodies every frame
+   - No interpolation — direct copy keeps code simple
+
+5. MediaPipe CDN Loading:
+   - Hand tracking model loaded from jsdelivr CDN at runtime
+   - No local model files needed, reducing bundle size
+   - Graceful fallback with error messages if loading fails
+
+6. Gesture Debouncing:
+   - 120ms debounce on gesture state changes prevents jittering
+   - Voice commands have 800ms debounce to prevent repeats
+   - Smooth blend transitions (lerp 0.08) for particle mode changes
+
+================================================================================
+7. UI / VISUAL DESIGN
+================================================================================
+
+Theme: Dark Glassmorphism (Sci-Fi / "Iron Man" aesthetic)
+Primary Background: #0a0a0a (near black)
+Accent Color: #64b5f6 (Material Design Blue 300)
+Secondary Text: #90caf9 (Material Blue 200)
+Value Text: #ffffff (white)
+Font Stack: 'Courier New', monospace (terminal/hacker aesthetic)
+Title Font: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif (body)
+
+Panel Design:
+  - Background: rgba(0, 0, 0, 0.8) with backdrop-filter: blur(10px)
+  - Border: 1px solid rgba(255, 255, 255, 0.2)
+  - Border-radius: 8px
+  - Button hover: blue glow (box-shadow 10px rgba blue)
+  - Button active: scale(0.95) press animation
+  - Grid layout for button groups (2 columns, 8px gap)
+
+Error Display:
+  - Red background rgba(255, 0, 0, 0.8)
+  - Same blur/border treatment as other panels
+  - Hidden by default, shown programmatically
+
+================================================================================
+8. PERFORMANCE CHARACTERISTICS
+================================================================================
+
+Target:       60 FPS at 1080p on modern hardware
+Physics:      Stable with 100+ dynamic rigid bodies
+Hand Tracking: ~30 FPS (tied to MediaPipe processing speed)
+Particles:    5000 GPU-computed particles with negligible CPU cost
+Memory:       ~150MB typical (Three.js scene + MediaPipe model)
+Latency:      <100ms hand gesture to visual response
+Pixel Ratio:  Capped at 2x to prevent GPU strain on 4K displays
+Shadow Maps:  2048×2048 (directional), 1024×1024 (point light)
+Bloom Pass:   Single UnrealBloomPass (strength 0.18, minimal overhead)
+
+Performance Optimizations:
+  - requestAnimationFrame loop (browser-managed frame scheduling)
+  - frustumCulled = false on particles (always render, skip culling check)
+  - Velocity clamping (±8 m/s linear, ±6 rad/s angular) prevents instability
+  - Physics sub-stepping (max 3) handles frame drops gracefully
+  - Shader-based particles avoid JavaScript per-particle overhead
+
+================================================================================
+9. CONTROLS REFERENCE
+================================================================================
+
+UI Buttons:
+  Add Cube          — Spawn a blue cube at random position, Y=15
+  Add Sphere        — Spawn an amber sphere at random position, Y=15
+  Delete Last       — Remove the most recently created object
+  Toggle Gravity    — Enable/disable gravity (default: -9.8 m/s²)
+  Increase          — Increase gravity by 1 m/s²
+  Decrease          — Decrease gravity by 1 m/s²
+  Start Voice       — Activate voice command recognition
+
+Hand Gestures:
+  Pinch (thumb+index) — Grab nearest object within 3.5 units
+  Open hand (release) — Throw grabbed object with hand velocity
+  Fast hand motion    — Trigger particle shockwave (velocity > 2.5)
+  Both hands open     — Reassemble scattered particles (spring force)
+  Both fists closed   — Scatter particles outward (explosion force)
+
+Voice Commands:
+  "create cube"              → Spawn a cube
+  "create sphere"            → Spawn a sphere
+  "delete object"            → Remove last object
+  "turn off gravity"         → Toggle gravity
+  "increase gravity"         → Increase gravity
+  "scatter particles"        → Explode particles
+  "reassemble particles"     → Gather particles back
+
+================================================================================
+10. BUILD & DEVELOPMENT
+================================================================================
+
+Prerequisites:
+  - Node.js >= 14.0.0
+  - Modern browser with WebGL + WebRTC (Chrome, Firefox, Edge)
+  - Webcam for hand gesture features
+
+Development:
+  npm install       — Install three, cannon-es, @mediapipe/hands, vite
+  npm run dev       — Start Vite dev server on http://127.0.0.1:3000
+  npm run build     — Create production build in dist/
+  npm run preview   — Preview production build locally
+
+Vite Configuration:
+  - Port: process.env.PORT or 3000
+  - Host: 127.0.0.1 (localhost only)
+  - Auto-open: disabled
+  - Build target: esnext
+  - Minification: esbuild
+
+================================================================================
+11. DEPENDENCIES
+================================================================================
+
+Production Dependencies:
+  three@^0.183.2           — 3D rendering (WebGL)
+  cannon-es@^0.20.0        — Physics simulation
+  @mediapipe/hands@^0.4    — Hand landmark detection (also loaded via CDN)
+
+Development Dependencies:
+  vite@^5.0.0              — Build tool and dev server
+
+External CDN Resources (loaded at runtime):
+  https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js
+  https://cdn.jsdelivr.net/npm/@mediapipe/hands/ (model files)
+
+================================================================================
+END OF DOCUMENT
+================================================================================

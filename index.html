@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS — Hand-Tracked Particle System</title>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Rajdhani', sans-serif;
+      overflow: hidden;
+      background: #000;
+      color: #e0e0e0;
+    }
+
+    /* ═══════════════════════════════════════════
+       LANDING PAGE
+       ═══════════════════════════════════════════ */
+    #landing {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      overflow: hidden;
+    }
+
+    #landing-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .landing-content {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .arc-reactor {
+      width: 120px;
+      height: 120px;
+      position: relative;
+      margin-bottom: 10px;
+    }
+
+    .arc-reactor .ring {
+      position: absolute;
+      border-radius: 50%;
+      border: 2px solid rgba(100, 181, 246, 0.6);
+      animation: reactor-spin 4s linear infinite;
+    }
+
+    .arc-reactor .ring:nth-child(1) {
+      inset: 0;
+      border-color: rgba(100, 181, 246, 0.3);
+      animation-duration: 6s;
+    }
+
+    .arc-reactor .ring:nth-child(2) {
+      inset: 10px;
+      border-color: rgba(100, 181, 246, 0.5);
+      animation-duration: 4s;
+      animation-direction: reverse;
+    }
+
+    .arc-reactor .ring:nth-child(3) {
+      inset: 22px;
+      border-color: rgba(100, 181, 246, 0.8);
+      animation-duration: 3s;
+      box-shadow: 0 0 15px rgba(100, 181, 246, 0.4), inset 0 0 15px rgba(100, 181, 246, 0.2);
+    }
+
+    .arc-reactor .core {
+      position: absolute;
+      inset: 35px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(100, 181, 246, 0.9), rgba(100, 181, 246, 0.3) 60%, transparent 80%);
+      box-shadow: 0 0 40px rgba(100, 181, 246, 0.6), 0 0 80px rgba(100, 181, 246, 0.3);
+      animation: core-pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes reactor-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes core-pulse {
+      0%, 100% { opacity: 0.8; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.1); }
+    }
+
+    .landing-title {
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(48px, 8vw, 96px);
+      font-weight: 900;
+      letter-spacing: 12px;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, #64b5f6 0%, #e3f2fd 40%, #64b5f6 60%, #1565c0 100%);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: title-shimmer 3s linear infinite;
+      filter: drop-shadow(0 0 30px rgba(100, 181, 246, 0.5));
+    }
+
+    @keyframes title-shimmer {
+      to { background-position: 200% center; }
+    }
+
+    .landing-subtitle {
+      font-family: 'Rajdhani', monospace;
+      font-size: clamp(14px, 2.5vw, 22px);
+      font-weight: 300;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      color: rgba(144, 202, 249, 0.7);
+      max-width: 600px;
+    }
+
+    .landing-version {
+      font-family: 'Orbitron', monospace;
+      font-size: 11px;
+      letter-spacing: 4px;
+      color: rgba(100, 181, 246, 0.4);
+      margin-top: -10px;
+    }
+
+    .landing-divider {
+      width: 200px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(100, 181, 246, 0.8), transparent);
+      margin: 10px 0;
+      box-shadow: 0 0 10px rgba(100, 181, 246, 0.3);
+    }
+
+    .landing-features {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 600px;
+    }
+
+    .feature-chip {
+      font-family: 'Rajdhani', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 6px 16px;
+      border: 1px solid rgba(100, 181, 246, 0.2);
+      border-radius: 20px;
+      color: rgba(144, 202, 249, 0.6);
+      background: rgba(100, 181, 246, 0.05);
+      backdrop-filter: blur(4px);
+    }
+
+    .cta-button {
+      position: relative;
+      margin-top: 20px;
+      padding: 18px 48px;
+      font-family: 'Orbitron', monospace;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: #e3f2fd;
+      background: transparent;
+      border: 2px solid rgba(100, 181, 246, 0.6);
+      border-radius: 4px;
+      cursor: pointer;
+      overflow: hidden;
+      transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    .cta-button::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(100, 181, 246, 0.15), rgba(100, 181, 246, 0.05));
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+
+    .cta-button::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 300%;
+      height: 300%;
+      background: radial-gradient(circle, rgba(100, 181, 246, 0.3), transparent 60%);
+      transform: translate(-50%, -50%) scale(0);
+      transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    .cta-button:hover {
+      border-color: rgba(100, 181, 246, 1);
+      box-shadow: 0 0 30px rgba(100, 181, 246, 0.3), inset 0 0 30px rgba(100, 181, 246, 0.1);
+      transform: translateY(-2px);
+    }
+
+    .cta-button:hover::before { opacity: 1; }
+
+    .cta-button:hover::after {
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    .cta-button:active {
+      transform: translateY(0) scale(0.98);
+    }
+
+    .cta-button .btn-text {
+      position: relative;
+      z-index: 1;
+    }
+
+    .scan-line {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(100, 181, 246, 0.6), transparent);
+      animation: scan 3s linear infinite;
+      opacity: 0.3;
+    }
+
+    @keyframes scan {
+      0% { top: 0; }
+      100% { top: 100%; }
+    }
+
+    /* ═══════════════════════════════════════════
+       WARP TRANSITION
+       ═══════════════════════════════════════════ */
+    #warp-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      pointer-events: none;
+      opacity: 0;
+      display: none;
+    }
+
+    #warp-canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ═══════════════════════════════════════════
+       MAIN APP
+       ═══════════════════════════════════════════ */
+    #app {
+      opacity: 0;
+      transition: opacity 1.2s ease-in;
+    }
+
+    #app.visible {
+      opacity: 1;
+    }
+
+    #videoElement { display: none; }
+
+    /* ─── HUD PANEL ─── */
+    .hud {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      pointer-events: none;
+      width: 280px;
+    }
+
+    .hud-panel {
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(100, 181, 246, 0.2);
+      border-radius: 8px;
+      padding: 18px;
+      backdrop-filter: blur(12px);
+      margin-bottom: 12px;
+    }
+
+    .hud-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: rgba(100, 181, 246, 0.5);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(100, 181, 246, 0.1);
+    }
+
+    .hud-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-family: 'Rajdhani', monospace;
+      font-size: 13px;
+    }
+
+    .hud-label {
+      color: rgba(144, 202, 249, 0.6);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      font-weight: 500;
+    }
+
+    .hud-value {
+      color: #e3f2fd;
+      font-weight: 600;
+      font-family: 'Orbitron', monospace;
+      font-size: 12px;
+    }
+
+    .hud-value.accent {
+      color: #64b5f6;
+      text-shadow: 0 0 10px rgba(100, 181, 246, 0.4);
+    }
+
+    /* Shape name display */
+    .shape-display {
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    .shape-name {
+      font-family: 'Orbitron', monospace;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      color: #e3f2fd;
+      text-transform: uppercase;
+      text-shadow: 0 0 20px rgba(100, 181, 246, 0.5);
+    }
+
+    /* Shape dots */
+    .shape-dots {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .shape-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(100, 181, 246, 0.2);
+      border: 1px solid rgba(100, 181, 246, 0.3);
+      transition: all 0.3s ease;
+    }
+
+    .shape-dot.active {
+      background: #64b5f6;
+      box-shadow: 0 0 8px rgba(100, 181, 246, 0.6);
+      transform: scale(1.3);
+    }
+
+    /* Audio meters — multi-band */
+    .audio-bands {
+      margin-top: 8px;
+    }
+
+    .band-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+
+    .band-label {
+      font-family: 'Orbitron', monospace;
+      font-size: 8px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      color: rgba(144, 202, 249, 0.4);
+      width: 30px;
+      text-align: right;
+    }
+
+    .band-meter {
+      flex: 1;
+      height: 4px;
+      background: rgba(100, 181, 246, 0.08);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .band-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 2px;
+      transition: width 0.05s linear;
+    }
+
+    .band-fill.bass { background: linear-gradient(90deg, #ff4444, #ff8800); }
+    .band-fill.mid { background: linear-gradient(90deg, #44ff88, #88ffcc); }
+    .band-fill.high { background: linear-gradient(90deg, #4488ff, #88ccff); }
+
+    /* Beat indicator */
+    .beat-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .beat-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ff4444;
+      opacity: 0.2;
+      transition: opacity 0.05s, transform 0.05s;
+      box-shadow: 0 0 10px rgba(255, 68, 68, 0.5);
+    }
+
+    .beat-label {
+      font-family: 'Rajdhani', monospace;
+      font-size: 11px;
+      color: rgba(144, 202, 249, 0.4);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    /* Cheat notification toast */
+    .cheat-notification {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.8);
+      z-index: 500;
+      text-align: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    .cheat-notification.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    .cheat-notification.hidden {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.8);
+    }
+
+    .cheat-notification .cheat-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 36px;
+      font-weight: 900;
+      letter-spacing: 8px;
+      color: #ff4444;
+      text-shadow: 0 0 40px rgba(255, 68, 68, 0.8), 0 0 80px rgba(255, 68, 68, 0.4);
+      text-transform: uppercase;
+    }
+
+    .cheat-notification .cheat-subtitle {
+      font-family: 'Rajdhani', monospace;
+      font-size: 16px;
+      letter-spacing: 4px;
+      color: rgba(255, 200, 200, 0.8);
+      margin-top: 8px;
+      text-transform: uppercase;
+    }
+
+    /* Active cheats row */
+    .cheats-row {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(100, 181, 246, 0.1);
+    }
+
+    .cheats-label {
+      font-family: 'Orbitron', monospace;
+      font-size: 8px;
+      letter-spacing: 2px;
+      color: rgba(100, 181, 246, 0.3);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .cheats-value {
+      font-family: 'Orbitron', monospace;
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: rgba(144, 202, 249, 0.4);
+      word-break: break-all;
+    }
+
+    /* Controls hint panel */
+    .hud-controls {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .hud-controls .hud-panel {
+      padding: 14px 18px;
+    }
+
+    .control-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+      font-family: 'Rajdhani', monospace;
+      font-size: 12px;
+      color: rgba(144, 202, 249, 0.5);
+      letter-spacing: 1px;
+    }
+
+    .control-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .key {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 24px;
+      height: 22px;
+      padding: 0 6px;
+      border: 1px solid rgba(100, 181, 246, 0.3);
+      border-radius: 3px;
+      font-family: 'Orbitron', monospace;
+      font-size: 9px;
+      font-weight: 600;
+      color: rgba(144, 202, 249, 0.7);
+      background: rgba(100, 181, 246, 0.05);
+      flex-shrink: 0;
+    }
+
+    /* Right-side info */
+    .hud-right {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .hud-right .hud-panel {
+      padding: 14px 18px;
+      width: 200px;
+    }
+
+    .gesture-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .gesture-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: rgba(100, 181, 246, 0.2);
+      transition: all 0.3s ease;
+    }
+
+    .gesture-dot.active {
+      background: #4caf50;
+      box-shadow: 0 0 8px rgba(76, 175, 80, 0.6);
+    }
+
+    .gesture-label {
+      font-family: 'Rajdhani', monospace;
+      font-size: 12px;
+      color: rgba(144, 202, 249, 0.5);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    /* Active cheat badge — bottom right */
+    .cheat-badge {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      z-index: 10;
+      pointer-events: none;
+      background: rgba(255, 50, 50, 0.1);
+      border: 1px solid rgba(255, 68, 68, 0.3);
+      border-radius: 6px;
+      padding: 10px 16px;
+      backdrop-filter: blur(8px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .cheat-badge.hidden {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+
+    .cheat-badge.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .cheat-badge-text {
+      font-family: 'Orbitron', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      color: #ff4444;
+      text-transform: uppercase;
+      text-shadow: 0 0 10px rgba(255, 68, 68, 0.4);
+    }
+
+    /* HUD toggle button */
+    .hud-toggle {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid rgba(100, 181, 246, 0.3);
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(8px);
+      color: rgba(144, 202, 249, 0.6);
+      font-family: 'Orbitron', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+      pointer-events: auto;
+    }
+
+    .hud-toggle:hover {
+      border-color: rgba(100, 181, 246, 0.7);
+      color: #e3f2fd;
+      box-shadow: 0 0 12px rgba(100, 181, 246, 0.3);
+    }
+
+    /* Hidden HUD state */
+    .hud-hidden .hud,
+    .hud-hidden .hud-right,
+    .hud-hidden .hud-controls {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+    }
+
+    .hud:not(.hud-hidden *),
+    .hud-right:not(.hud-hidden *),
+    .hud-controls:not(.hud-hidden *) {
+      transition: opacity 0.4s ease;
+    }
+
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: 'Orbitron', monospace;
+      font-size: 16px;
+      letter-spacing: 4px;
+      color: #64b5f6;
+      text-transform: uppercase;
+      text-shadow: 0 0 20px rgba(100, 181, 246, 0.5);
+      z-index: 20;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ══════════════ LANDING PAGE ══════════════ -->
+  <div id="landing">
+    <canvas id="landing-canvas"></canvas>
+    <div class="scan-line"></div>
+    <div class="landing-content">
+      <div class="arc-reactor">
+        <div class="ring"></div>
+        <div class="ring"></div>
+        <div class="ring"></div>
+        <div class="core"></div>
+      </div>
+      <h1 class="landing-title">JARVIS</h1>
+      <div class="landing-version">V 1 . 0 . 0</div>
+      <div class="landing-divider"></div>
+      <p class="landing-subtitle">Hand-Tracked 3D Particle System with Real-Time Gesture Recognition</p>
+      <div class="landing-features">
+        <span class="feature-chip">Hand Tracking</span>
+        <span class="feature-chip">Shape Morphing</span>
+        <span class="feature-chip">10K Particles</span>
+        <span class="feature-chip">Pinch Gestures</span>
+        <span class="feature-chip">AI Vision</span>
+      </div>
+      <button class="cta-button" id="btn-launch">
+        <span class="btn-text">Initialize System</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════════ WARP TRANSITION ══════════════ -->
+  <div id="warp-overlay">
+    <canvas id="warp-canvas"></canvas>
+  </div>
+
+  <!-- ══════════════ MAIN APP ══════════════ -->
+  <div id="app">
+
+    <!-- Left HUD: Stats + Shape -->
+    <div class="hud">
+      <div class="hud-panel">
+        <div class="shape-display">
+          <div class="shape-name" id="shape-name">Universe</div>
+          <div class="shape-dots">
+            <div class="shape-dot active"></div>
+            <div class="shape-dot"></div>
+            <div class="shape-dot"></div>
+            <div class="shape-dot"></div>
+            <div class="shape-dot"></div>
+            <div class="shape-dot"></div>
+            <div class="shape-dot"></div>
+            <div class="shape-dot"></div>
+          </div>
+        </div>
+      </div>
+      <div class="hud-panel">
+        <div class="hud-title">System</div>
+        <div class="hud-row">
+          <span class="hud-label">FPS</span>
+          <span class="hud-value accent" id="fps-value">60</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-label">Particles</span>
+          <span class="hud-value">15,000</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-label">Renderer</span>
+          <span class="hud-value">WebGL + Bloom</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-label">Audio</span>
+          <span class="hud-value accent" id="audio-status">OFF</span>
+        </div>
+        <div class="audio-bands">
+          <div class="band-row">
+            <span class="band-label">BASS</span>
+            <div class="band-meter"><div class="band-fill bass" id="bass-fill"></div></div>
+          </div>
+          <div class="band-row">
+            <span class="band-label">MID</span>
+            <div class="band-meter"><div class="band-fill mid" id="mid-fill"></div></div>
+          </div>
+          <div class="band-row">
+            <span class="band-label">HIGH</span>
+            <div class="band-meter"><div class="band-fill high" id="high-fill"></div></div>
+          </div>
+        </div>
+        <div class="beat-indicator">
+          <div class="beat-dot" id="beat-dot"></div>
+          <span class="beat-label">Beat Detection</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right HUD: Gesture status -->
+    <div class="hud-right">
+      <div class="hud-panel">
+        <div class="hud-title">Input</div>
+        <div class="gesture-indicator">
+          <div class="gesture-dot" id="hand-dot"></div>
+          <span class="gesture-label">Hand Tracking</span>
+        </div>
+        <div class="gesture-indicator">
+          <div class="gesture-dot" id="mouse-dot"></div>
+          <span class="gesture-label">Mouse Control</span>
+        </div>
+        <div class="gesture-indicator">
+          <div class="gesture-dot" id="audio-dot"></div>
+          <span class="gesture-label">Audio Reactive</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Left: Controls -->
+    <div class="hud-controls">
+      <div class="hud-panel">
+        <div class="hud-title">Controls</div>
+        <div class="control-row"><span class="key">1</span>-<span class="key">8</span> Select shape</div>
+        <div class="control-row"><span class="key">SPACE</span> Explode particles</div>
+        <div class="control-row"><span class="key">M</span> Toggle audio reactive</div>
+        <div class="control-row"><span class="key">MOUSE</span> Hover attract / Click repel</div>
+        <div class="control-row"><span class="key">PINCH</span> Cycle shape (hand)</div>
+        <div class="control-row" style="margin-top:8px;border-top:1px solid rgba(100,181,246,0.1);padding-top:8px;opacity:0.4;"><span class="key">???</span> Try typing secret words...</div>
+      </div>
+    </div>
+
+    <!-- Toggle HUD button -->
+    <button class="hud-toggle" id="hud-toggle" title="Toggle HUD">H</button>
+
+    <!-- Active cheat badge — hidden until a cheat is on -->
+    <div class="cheat-badge hidden" id="cheat-badge">
+      <span class="cheat-badge-text" id="active-cheats"></span>
+    </div>
+
+
+    <!-- Cheat activation notification -->
+    <div class="cheat-notification hidden" id="cheat-notification">
+      <div class="cheat-title" id="cheat-name"></div>
+      <div class="cheat-subtitle" id="cheat-desc"></div>
+    </div>
+
+    <div id="loading">Initializing AI Model &amp; Camera...</div>
+    <video id="videoElement" autoplay playsinline></video>
+
+    <script>
+      document.getElementById('hud-toggle').addEventListener('click', () => {
+        document.getElementById('app').classList.toggle('hud-hidden');
+      });
+    </script>
+  </div>
+
+  <!-- ══════════════ LANDING + WARP SCRIPTS ══════════════ -->
+  <script>
+  (function() {
+    const landingCanvas = document.getElementById('landing-canvas');
+    const lctx = landingCanvas.getContext('2d');
+    let landingActive = true;
+
+    function resizeLanding() {
+      landingCanvas.width = window.innerWidth;
+      landingCanvas.height = window.innerHeight;
+    }
+    resizeLanding();
+    window.addEventListener('resize', resizeLanding);
+
+    const STAR_COUNT = 300;
+    const stars = [];
+    for (let i = 0; i < STAR_COUNT; i++) {
+      stars.push({
+        x: Math.random() * landingCanvas.width,
+        y: Math.random() * landingCanvas.height,
+        size: Math.random() * 1.5 + 0.3,
+        speed: Math.random() * 0.3 + 0.05,
+        opacity: Math.random() * 0.6 + 0.2,
+        pulse: Math.random() * Math.PI * 2,
+      });
+    }
+
+    function drawGrid(ctx, w, h) {
+      ctx.strokeStyle = 'rgba(100, 181, 246, 0.04)';
+      ctx.lineWidth = 0.5;
+      const spacing = 60;
+      for (let x = 0; x < w; x += spacing) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      }
+      for (let y = 0; y < h; y += spacing) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+    }
+
+    function animateLanding() {
+      if (!landingActive) return;
+      const w = landingCanvas.width;
+      const h = landingCanvas.height;
+
+      lctx.fillStyle = '#000';
+      lctx.fillRect(0, 0, w, h);
+      drawGrid(lctx, w, h);
+
+      for (const star of stars) {
+        star.y -= star.speed;
+        star.pulse += 0.02;
+        if (star.y < -5) { star.y = h + 5; star.x = Math.random() * w; }
+        const alpha = star.opacity * (0.6 + 0.4 * Math.sin(star.pulse));
+        lctx.beginPath();
+        lctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        lctx.fillStyle = `rgba(180, 210, 255, ${alpha})`;
+        lctx.fill();
+        if (star.size > 1) {
+          lctx.beginPath();
+          lctx.arc(star.x, star.y, star.size * 3, 0, Math.PI * 2);
+          lctx.fillStyle = `rgba(100, 181, 246, ${alpha * 0.1})`;
+          lctx.fill();
+        }
+      }
+
+      const vignette = lctx.createRadialGradient(w/2, h/2, h*0.3, w/2, h/2, h*0.9);
+      vignette.addColorStop(0, 'transparent');
+      vignette.addColorStop(1, 'rgba(0, 0, 0, 0.6)');
+      lctx.fillStyle = vignette;
+      lctx.fillRect(0, 0, w, h);
+
+      requestAnimationFrame(animateLanding);
+    }
+    requestAnimationFrame(animateLanding);
+
+    // ─── WARP ───
+    const warpOverlay = document.getElementById('warp-overlay');
+    const warpCanvas = document.getElementById('warp-canvas');
+    const wctx = warpCanvas.getContext('2d');
+
+    function resizeWarp() {
+      warpCanvas.width = window.innerWidth;
+      warpCanvas.height = window.innerHeight;
+    }
+    resizeWarp();
+    window.addEventListener('resize', resizeWarp);
+
+    const WARP_STAR_COUNT = 1200;
+    const warpStars = [];
+
+    function initWarpStars() {
+      warpStars.length = 0;
+      for (let i = 0; i < WARP_STAR_COUNT; i++) {
+        warpStars.push({
+          x: (Math.random() - 0.5) * 2,
+          y: (Math.random() - 0.5) * 2,
+          z: Math.random() * 4 + 0.5,
+        });
+      }
+    }
+
+    function drawSpaceship(ctx, cx, cy, scale, glow) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(scale, scale);
+
+      // Engine glow
+      const eg = ctx.createRadialGradient(0, 30, 0, 0, 30, 40 * glow);
+      eg.addColorStop(0, `rgba(100, 181, 246, ${0.9 * glow})`);
+      eg.addColorStop(0.3, `rgba(100, 181, 246, ${0.4 * glow})`);
+      eg.addColorStop(1, 'transparent');
+      ctx.fillStyle = eg;
+      ctx.fillRect(-50, 10, 100, 80);
+
+      // Engine trails
+      for (let i = -1; i <= 1; i++) {
+        const tg = ctx.createLinearGradient(i * 15, 20, i * 15, 20 + 60 * glow);
+        tg.addColorStop(0, `rgba(100, 181, 246, ${0.8 * glow})`);
+        tg.addColorStop(0.5, `rgba(66, 133, 244, ${0.3 * glow})`);
+        tg.addColorStop(1, 'transparent');
+        ctx.fillStyle = tg;
+        ctx.fillRect(i * 15 - 3, 20, 6, 60 * glow);
+      }
+
+      // Body
+      ctx.fillStyle = '#1a1a2e';
+      ctx.strokeStyle = 'rgba(100, 181, 246, 0.8)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, -40);
+      ctx.lineTo(20, -10);
+      ctx.lineTo(35, 15);
+      ctx.lineTo(15, 20);
+      ctx.lineTo(15, 10);
+      ctx.lineTo(-15, 10);
+      ctx.lineTo(-15, 20);
+      ctx.lineTo(-35, 15);
+      ctx.lineTo(-20, -10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Cockpit
+      const cg = ctx.createLinearGradient(0, -30, 0, -5);
+      cg.addColorStop(0, 'rgba(100, 181, 246, 0.6)');
+      cg.addColorStop(1, 'rgba(100, 181, 246, 0.1)');
+      ctx.fillStyle = cg;
+      ctx.beginPath();
+      ctx.moveTo(0, -30);
+      ctx.lineTo(8, -10);
+      ctx.lineTo(-8, -10);
+      ctx.closePath();
+      ctx.fill();
+
+      // Wing accents
+      ctx.strokeStyle = 'rgba(100, 181, 246, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(18, -5); ctx.lineTo(30, 12); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-18, -5); ctx.lineTo(-30, 12); ctx.stroke();
+
+      ctx.restore();
+    }
+
+    const WARP_DURATION = 2100;
+    let warpStartTime = 0;
+    let warpAnimating = false;
+
+    function animateWarp(timestamp) {
+      if (!warpAnimating) return;
+      const elapsed = timestamp - warpStartTime;
+      const progress = Math.min(elapsed / WARP_DURATION, 1);
+      const w = warpCanvas.width;
+      const h = warpCanvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+
+      wctx.fillStyle = '#000';
+      wctx.fillRect(0, 0, w, h);
+
+      let warpSpeed;
+      if (progress < 0.15) warpSpeed = 0.02 + (progress / 0.15) * 0.3;
+      else if (progress < 0.7) warpSpeed = 0.32 + Math.sin((progress - 0.15) * 5) * 0.08;
+      else warpSpeed = 0.32 * (1 - ((progress - 0.7) / 0.3) ** 2);
+
+      const streakLength = progress < 0.15
+        ? progress / 0.15 * 10
+        : progress < 0.7 ? 10 + (progress - 0.15) * 30 : 10 * (1 - (progress - 0.7) / 0.3);
+
+      // Fade-in: stars ramp up brightness over first 15%
+      const fadeIn = progress < 0.15 ? progress / 0.15 : 1;
+      // Fade-out: white flash in last 15%
+      const fadeOut = progress > 0.85 ? (progress - 0.85) / 0.15 : 0;
+
+      for (const star of warpStars) {
+        const sx = cx + (star.x / star.z) * w * 0.5;
+        const sy = cy + (star.y / star.z) * h * 0.5;
+        star.z -= warpSpeed;
+        if (star.z <= 0.1) { star.z = 4 + Math.random(); star.x = (Math.random() - 0.5) * 2; star.y = (Math.random() - 0.5) * 2; }
+        const nx = cx + (star.x / star.z) * w * 0.5;
+        const ny = cy + (star.y / star.z) * h * 0.5;
+        const brightness = Math.min(1, (1 / star.z) * 0.8) * fadeIn;
+        const lineLen = Math.min(streakLength, Math.hypot(nx - sx, ny - sy));
+
+        if (lineLen > 0.5) {
+          const g = wctx.createLinearGradient(sx, sy, nx, ny);
+          g.addColorStop(0, `rgba(100, 181, 246, 0)`);
+          g.addColorStop(1, `rgba(180, 215, 255, ${brightness})`);
+          wctx.strokeStyle = g;
+          wctx.lineWidth = Math.max(0.5, (1 / star.z) * 2);
+          wctx.beginPath(); wctx.moveTo(sx, sy); wctx.lineTo(nx, ny); wctx.stroke();
+        } else {
+          wctx.fillStyle = `rgba(200, 220, 255, ${brightness * 0.7})`;
+          wctx.beginPath(); wctx.arc(nx, ny, Math.max(0.5, (1 / star.z) * 1.5), 0, Math.PI * 2); wctx.fill();
+        }
+      }
+
+      // Nebula glow
+      if (progress > 0.1 && progress < 0.85) {
+        const na = progress < 0.3 ? (progress - 0.1) / 0.2 * 0.15 : progress < 0.7 ? 0.15 : 0.15 * (1 - (progress - 0.7) / 0.15);
+        const ng = wctx.createRadialGradient(cx, cy, 0, cx, cy, w * 0.3);
+        ng.addColorStop(0, `rgba(100, 181, 246, ${Math.max(0, na * fadeIn)})`);
+        ng.addColorStop(1, 'transparent');
+        wctx.fillStyle = ng;
+        wctx.fillRect(0, 0, w, h);
+      }
+
+      // Fade-out white flash
+      if (fadeOut > 0) {
+        wctx.fillStyle = `rgba(255, 255, 255, ${fadeOut})`;
+        wctx.fillRect(0, 0, w, h);
+      }
+
+      if (progress < 1) requestAnimationFrame(animateWarp);
+      else finishTransition();
+    }
+
+    function finishTransition() {
+      warpAnimating = false;
+      warpOverlay.style.transition = 'opacity 0.8s ease-out';
+      warpOverlay.style.opacity = '0';
+      document.getElementById('app').classList.add('visible');
+      setTimeout(() => {
+        warpOverlay.style.display = 'none';
+        window.dispatchEvent(new Event('jarvis-ready'));
+      }, 800);
+    }
+
+    // Seamless zoom-to-warp transition
+    const ZOOM_DURATION = 1200;
+    let zoomStartTime = 0;
+    let zooming = false;
+
+    function animateZoom(timestamp) {
+      if (!zooming) return;
+      const elapsed = timestamp - zoomStartTime;
+      const t = Math.min(elapsed / ZOOM_DURATION, 1);
+
+      // Exponential ease-in — starts slow, accelerates hard
+      const eased = t * t * t;
+
+      // Scale: 1 → 15 (accelerating)
+      const scale = 1 + eased * 14;
+      const landing = document.getElementById('landing');
+      landing.style.transform = `scale(${scale})`;
+
+      // Fade landing out in the last 40%
+      const fadeStart = 0.6;
+      const opacity = t > fadeStart ? 1 - ((t - fadeStart) / (1 - fadeStart)) : 1;
+      landing.style.opacity = opacity;
+
+      // Start showing warp stars at 45% — they fade in underneath
+      if (t > 0.45) {
+        const warpOpacity = (t - 0.45) / 0.35;
+        warpOverlay.style.opacity = Math.min(warpOpacity, 1);
+
+        // Start warp animation at 65% if not already running
+        if (t > 0.65 && !warpAnimating) {
+          warpAnimating = true;
+          warpStartTime = performance.now();
+          requestAnimationFrame(animateWarp);
+        }
+      }
+
+      if (t < 1) {
+        requestAnimationFrame(animateZoom);
+      } else {
+        // Zoom done — hide landing, warp is already running
+        landing.style.display = 'none';
+        zooming = false;
+      }
+    }
+
+    document.getElementById('btn-launch').addEventListener('click', () => {
+      landingActive = false;
+
+      initWarpStars();
+      warpOverlay.style.display = 'block';
+      warpOverlay.style.opacity = '0';
+
+      zooming = true;
+      zoomStartTime = performance.now();
+      requestAnimationFrame(animateZoom);
+    });
+  })();
+  </script>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

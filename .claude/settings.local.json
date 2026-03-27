@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vite build)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(lsof -i :61912)"
+    ]
+  }
+}
