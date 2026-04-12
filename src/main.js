@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import DrawingSystem from './drawing/drawingSystem.js';
 import SpeechController from './voice/speechController.js';
 
 // ─── CONFIG ───
@@ -433,9 +432,6 @@ const shaderMaterial = new THREE.ShaderMaterial({
 const particleSystem = new THREE.Points(geometry, shaderMaterial);
 scene.add(particleSystem);
 
-// ─── 3D DRAWING SYSTEM ───
-let drawingSystem = new DrawingSystem(scene);
-
 // ═══════════════════════════════════════════
 //  AUDIO ENGINE — Multi-Band + Beat Detection
 // ═══════════════════════════════════════════
@@ -802,11 +798,6 @@ document.addEventListener('keydown', (e) => {
     toggleAudio();
     return;
   }
-  if (e.key === 'd' || e.key === 'D') {
-    drawMode = !drawMode;
-    updateHUD();
-    return;
-  }
   if (e.key === 'c' || e.key === 'C') {
     toggleNeuralInterface();
     return;
@@ -850,23 +841,10 @@ let twoHandBaseScale = 1.0;
 let currentScale = 1.0;
 const MIN_SCALE = 0.3, MAX_SCALE = 3.0;
 
-// 3D Drawing state
-let drawMode = false;
-
 // Voice-controlled spin state
 let voiceSpinActive = false;
 let voiceSpinSpeed = 0.02;
 let softMode = false; // softer lerp for particle movement
-
-// Reusable vector for unprojection (avoid per-frame allocation)
-const _unprojVec = new THREE.Vector3();
-function fingertipToWorld(landmark) {
-  _unprojVec.set((landmark.x - 0.5) * 2, -(landmark.y - 0.5) * 2, 0.5);
-  _unprojVec.unproject(camera);
-  const dir = _unprojVec.sub(camera.position).normalize();
-  const distance = -camera.position.z / dir.z;
-  return camera.position.clone().add(dir.multiplyScalar(distance));
-}
 
 function initHandTracking() {
   /* global Hands, Camera */
@@ -923,36 +901,14 @@ function initHandTracking() {
         twoHandPinchActive = false;
         const now = Date.now();
 
-        if (pinchDist1 < 0.05) {
-          if (drawMode && drawingSystem) {
-            // Draw mode: pinch = draw with index fingertip
-            const worldPos = fingertipToWorld(index1);
-            if (!drawingSystem.isDrawing) {
-              drawingSystem.startStroke(worldPos);
-            } else {
-              drawingSystem.addPoint(worldPos);
-            }
-          } else {
-            // Normal mode: pinch cycles shape
-            if (now - lastPinchTime > 1000 && !reforming) {
-              cycleShape();
-              lastPinchTime = now;
-            }
-          }
-        } else {
-          // Pinch released — end any active stroke
-          if (drawingSystem && drawingSystem.isDrawing) {
-            drawingSystem.endStroke();
-          }
+        if (pinchDist1 < 0.05 && now - lastPinchTime > 1000 && !reforming) {
+          cycleShape();
+          lastPinchTime = now;
         }
       }
     } else {
       handDetected = false;
       twoHandPinchActive = false;
-      // End stroke if hand lost
-      if (drawingSystem && drawingSystem.isDrawing) {
-        drawingSystem.endStroke();
-      }
     }
   });
 
@@ -1001,18 +957,9 @@ function updateInputIndicators() {
   if (mouseDot) mouseDot.classList.toggle('active', !handDetected);
 }
 
-function updateDrawHUD() {
-  const drawDot = document.getElementById('draw-dot');
-  const drawStatus = document.getElementById('draw-mode-status');
-  const strokeCount = document.getElementById('stroke-count');
-  const strokeIndicator = document.getElementById('stroke-count-indicator');
+function updateScaleHUD() {
   const scaleEl = document.getElementById('scale-value');
   const scaleIndicator = document.getElementById('scale-indicator');
-
-  if (drawDot) drawDot.classList.toggle('active', drawMode);
-  if (drawStatus) drawStatus.textContent = drawMode ? 'ON' : 'OFF';
-  if (strokeCount && drawingSystem) strokeCount.textContent = drawingSystem.getStrokeCount();
-  if (strokeIndicator) strokeIndicator.style.display = drawMode ? 'flex' : 'none';
   if (scaleEl) scaleEl.textContent = currentScale.toFixed(1) + 'x';
   if (scaleIndicator) scaleIndicator.style.display = twoHandPinchActive ? 'flex' : 'none';
 }
@@ -1290,7 +1237,7 @@ function animate() {
   composer.render();
   updateFPS();
   updateInputIndicators();
-  updateDrawHUD();
+  updateScaleHUD();
 }
 
 // ─── RESIZE ───
@@ -1308,21 +1255,6 @@ function initVoiceCommands() {
       switch (action) {
         case 'resetScale':
           currentScale = 1.0;
-          break;
-        case 'clearDrawing':
-          if (drawingSystem) drawingSystem.clear();
-          break;
-        case 'undoDrawing':
-          if (drawingSystem) drawingSystem.undo();
-          break;
-        case 'toggleDraw':
-          drawMode = true;
-          updateHUD();
-          break;
-        case 'stopDraw':
-          drawMode = false;
-          if (drawingSystem && drawingSystem.isDrawing) drawingSystem.endStroke();
-          updateHUD();
           break;
         case 'flip90':
           particleSystem.rotation.z += Math.PI / 2;

@@ -3,7 +3,8 @@
     "allow": [
       "Bash(npx vite build)",
       "mcp__Claude_Preview__preview_start",
-      "Bash(lsof -i :61912)"
+      "Bash(lsof -i :61912)",
+      "Bash(npm run:*)"
     ]
   }
 }
