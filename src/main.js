@@ -1303,80 +1303,82 @@ window.addEventListener('resize', () => {
 });
 
 // ─── VOICE COMMAND HANDLER ───
-const speech = new SpeechController({
-  onCommand: (action) => {
-    switch (action) {
-      case 'resetScale':
-        currentScale = 1.0;
-        break;
-      case 'clearDrawing':
-        if (drawingSystem) drawingSystem.clear();
-        break;
-      case 'undoDrawing':
-        if (drawingSystem) drawingSystem.undo();
-        break;
-      case 'toggleDraw':
-        drawMode = true;
-        updateHUD();
-        break;
-      case 'stopDraw':
-        drawMode = false;
-        if (drawingSystem && drawingSystem.isDrawing) drawingSystem.endStroke();
-        updateHUD();
-        break;
-      case 'flip90':
-        particleSystem.rotation.z += Math.PI / 2;
-        break;
-      case 'flip180':
-        particleSystem.rotation.z += Math.PI;
-        break;
-      case 'flip45':
-        particleSystem.rotation.z += Math.PI / 4;
-        break;
-      case 'flipX':
-        particleSystem.rotation.x += Math.PI / 2;
-        break;
-      case 'flipY':
-        particleSystem.rotation.y += Math.PI / 2;
-        break;
-      case 'startSpin':
-        voiceSpinActive = true;
-        break;
-      case 'stopSpin':
-        voiceSpinActive = false;
-        break;
-      case 'spinFaster':
-        voiceSpinSpeed = Math.min(voiceSpinSpeed * 2, 0.2);
-        break;
-      case 'spinSlower':
-        voiceSpinSpeed = Math.max(voiceSpinSpeed * 0.5, 0.002);
-        break;
-      case 'softMode':
-        softMode = true;
-        break;
-      case 'hardMode':
-        softMode = false;
-        break;
-      case 'scatterParticles':
-        triggerBurst();
-        break;
-      case 'reassembleParticles':
-        reforming = true;
-        reformTimer = 0;
-        break;
-      case 'decreaseGravity':
-        // Reduce particle expansion to simulate lighter feel
-        particleExpansion = Math.max(0.5, particleExpansion - 0.3);
-        break;
-      default:
-        break;
+function initVoiceCommands() {
+  return new SpeechController({
+    onCommand: (action) => {
+      switch (action) {
+        case 'resetScale':
+          currentScale = 1.0;
+          break;
+        case 'clearDrawing':
+          if (drawingSystem) drawingSystem.clear();
+          break;
+        case 'undoDrawing':
+          if (drawingSystem) drawingSystem.undo();
+          break;
+        case 'toggleDraw':
+          drawMode = true;
+          updateHUD();
+          break;
+        case 'stopDraw':
+          drawMode = false;
+          if (drawingSystem && drawingSystem.isDrawing) drawingSystem.endStroke();
+          updateHUD();
+          break;
+        case 'flip90':
+          particleSystem.rotation.z += Math.PI / 2;
+          break;
+        case 'flip180':
+          particleSystem.rotation.z += Math.PI;
+          break;
+        case 'flip45':
+          particleSystem.rotation.z += Math.PI / 4;
+          break;
+        case 'flipX':
+          particleSystem.rotation.x += Math.PI / 2;
+          break;
+        case 'flipY':
+          particleSystem.rotation.y += Math.PI / 2;
+          break;
+        case 'startSpin':
+          voiceSpinActive = true;
+          break;
+        case 'stopSpin':
+          voiceSpinActive = false;
+          break;
+        case 'spinFaster':
+          voiceSpinSpeed = Math.min(voiceSpinSpeed * 2, 0.2);
+          break;
+        case 'spinSlower':
+          voiceSpinSpeed = Math.max(voiceSpinSpeed * 0.5, 0.002);
+          break;
+        case 'softMode':
+          softMode = true;
+          break;
+        case 'hardMode':
+          softMode = false;
+          break;
+        case 'scatterParticles':
+          triggerBurst();
+          break;
+        case 'reassembleParticles':
+          reforming = true;
+          reformTimer = 0;
+          break;
+        case 'decreaseGravity':
+          particleExpansion = Math.max(0.5, particleExpansion - 0.3);
+          break;
+        default:
+          break;
+      }
     }
-  }
-});
+  });
+}
 
 // ─── START ───
 window.addEventListener('jarvis-ready', () => {
   initHandTracking();
+  initVoiceCommands();
   updateHUD();
   animate();
 });
