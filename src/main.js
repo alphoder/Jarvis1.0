@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import DrawingSystem from './drawing/drawingSystem.js';
+import SpeechController from './voice/speechController.js';
 
 // ─── CONFIG ───
 let PARTICLE_COUNT = 15000;
@@ -431,6 +433,9 @@ const shaderMaterial = new THREE.ShaderMaterial({
 const particleSystem = new THREE.Points(geometry, shaderMaterial);
 scene.add(particleSystem);
 
+// ─── 3D DRAWING SYSTEM ───
+drawingSystem = new DrawingSystem(scene);
+
 // ═══════════════════════════════════════════
 //  AUDIO ENGINE — Multi-Band + Beat Detection
 // ═══════════════════════════════════════════
@@ -797,6 +802,11 @@ document.addEventListener('keydown', (e) => {
     toggleAudio();
     return;
   }
+  if (e.key === 'd' || e.key === 'D') {
+    drawMode = !drawMode;
+    updateHUD();
+    return;
+  }
   if (e.key === 'c' || e.key === 'C') {
     toggleNeuralInterface();
     return;
@@ -833,6 +843,32 @@ document.addEventListener('keydown', (e) => {
 const videoElement = document.getElementById('videoElement');
 let handX = 0, handY = 0, handDetected = false, lastPinchTime = 0;
 
+// Two-hand resize state
+let twoHandPinchActive = false;
+let twoHandInitialDist = 0;
+let twoHandBaseScale = 1.0;
+let currentScale = 1.0;
+const MIN_SCALE = 0.3, MAX_SCALE = 3.0;
+
+// 3D Drawing state
+let drawMode = false;
+let drawingSystem = null;
+
+// Voice-controlled spin state
+let voiceSpinActive = false;
+let voiceSpinSpeed = 0.02;
+let softMode = false; // softer lerp for particle movement
+
+// Reusable vector for unprojection (avoid per-frame allocation)
+const _unprojVec = new THREE.Vector3();
+function fingertipToWorld(landmark) {
+  _unprojVec.set((landmark.x - 0.5) * 2, -(landmark.y - 0.5) * 2, 0.5);
+  _unprojVec.unproject(camera);
+  const dir = _unprojVec.sub(camera.position).normalize();
+  const distance = -camera.position.z / dir.z;
+  return camera.position.clone().add(dir.multiplyScalar(distance));
+}
+
 function initHandTracking() {
   /* global Hands, Camera */
   const hands = new Hands({
@@ -852,20 +888,72 @@ function initHandTracking() {
       const maxX = Math.max(...landmarks.map(l => l.x));
       particleExpansion = 1 + (maxX - minX) * 2;
 
-      const thumb = landmarks[4], index = landmarks[8];
-      const pinchDist = Math.hypot(thumb.x - index.x, thumb.y - index.y);
-      const now = Date.now();
-      if (pinchDist < 0.05 && now - lastPinchTime > 1000 && !reforming) {
-        cycleShape();
-        lastPinchTime = now;
-      }
+      const thumb1 = landmarks[4], index1 = landmarks[8];
+      const pinchDist1 = Math.hypot(thumb1.x - index1.x, thumb1.y - index1.y);
+
       if (results.multiHandLandmarks.length > 1) {
+        // ─── TWO HANDS DETECTED ───
         const hand2 = results.multiHandLandmarks[1];
-        const dist = Math.hypot(landmarks[0].x - hand2[0].x, landmarks[0].y - hand2[0].y);
-        camera.position.z = 10 + (1 - dist) * 20;
+        const thumb2 = hand2[4], index2 = hand2[8];
+        const pinchDist2 = Math.hypot(thumb2.x - index2.x, thumb2.y - index2.y);
+
+        if (pinchDist1 < 0.05 && pinchDist2 < 0.05) {
+          // Both hands pinching → RESIZE MODE
+          const mid1x = (thumb1.x + index1.x) / 2;
+          const mid1y = (thumb1.y + index1.y) / 2;
+          const mid2x = (thumb2.x + index2.x) / 2;
+          const mid2y = (thumb2.y + index2.y) / 2;
+          const currentDist = Math.hypot(mid1x - mid2x, mid1y - mid2y);
+
+          if (!twoHandPinchActive) {
+            twoHandPinchActive = true;
+            twoHandInitialDist = currentDist;
+            twoHandBaseScale = currentScale;
+          } else {
+            const rawScale = twoHandBaseScale * (currentDist / twoHandInitialDist);
+            currentScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, rawScale));
+          }
+        } else {
+          twoHandPinchActive = false;
+          // Two hands not pinching → ZOOM (increased sensitivity)
+          const dist = Math.hypot(landmarks[0].x - hand2[0].x, landmarks[0].y - hand2[0].y);
+          camera.position.z = 10 + (1 - dist) * 40;
+        }
+      } else {
+        // ─── SINGLE HAND ───
+        twoHandPinchActive = false;
+        const now = Date.now();
+
+        if (pinchDist1 < 0.05) {
+          if (drawMode && drawingSystem) {
+            // Draw mode: pinch = draw with index fingertip
+            const worldPos = fingertipToWorld(index1);
+            if (!drawingSystem.isDrawing) {
+              drawingSystem.startStroke(worldPos);
+            } else {
+              drawingSystem.addPoint(worldPos);
+            }
+          } else {
+            // Normal mode: pinch cycles shape
+            if (now - lastPinchTime > 1000 && !reforming) {
+              cycleShape();
+              lastPinchTime = now;
+            }
+          }
+        } else {
+          // Pinch released — end any active stroke
+          if (drawingSystem && drawingSystem.isDrawing) {
+            drawingSystem.endStroke();
+          }
+        }
       }
     } else {
       handDetected = false;
+      twoHandPinchActive = false;
+      // End stroke if hand lost
+      if (drawingSystem && drawingSystem.isDrawing) {
+        drawingSystem.endStroke();
+      }
     }
   });
 
@@ -912,6 +1000,22 @@ function updateInputIndicators() {
   const mouseDot = document.getElementById('mouse-dot');
   if (handDot) handDot.classList.toggle('active', handDetected);
   if (mouseDot) mouseDot.classList.toggle('active', !handDetected);
+}
+
+function updateDrawHUD() {
+  const drawDot = document.getElementById('draw-dot');
+  const drawStatus = document.getElementById('draw-mode-status');
+  const strokeCount = document.getElementById('stroke-count');
+  const strokeIndicator = document.getElementById('stroke-count-indicator');
+  const scaleEl = document.getElementById('scale-value');
+  const scaleIndicator = document.getElementById('scale-indicator');
+
+  if (drawDot) drawDot.classList.toggle('active', drawMode);
+  if (drawStatus) drawStatus.textContent = drawMode ? 'ON' : 'OFF';
+  if (strokeCount && drawingSystem) strokeCount.textContent = drawingSystem.getStrokeCount();
+  if (strokeIndicator) strokeIndicator.style.display = drawMode ? 'flex' : 'none';
+  if (scaleEl) scaleEl.textContent = currentScale.toFixed(1) + 'x';
+  if (scaleIndicator) scaleIndicator.style.display = twoHandPinchActive ? 'flex' : 'none';
 }
 
 let fpsFrames = 0, fpsTime = performance.now();
@@ -1094,7 +1198,7 @@ function animate() {
         const tz = targetPositions[i3 + 2] * particleExpansion;
 
         // Reforming: accelerating pull (slow start → fast snap)
-        let lerpSpeed = LERP_SPEED;
+        let lerpSpeed = softMode ? LERP_SPEED * 0.3 : LERP_SPEED;
         if (reforming) {
           const t = Math.min(reformTimer / REFORM_DURATION, 1);
           // Cubic ease-in: starts very slow, accelerates
@@ -1168,6 +1272,11 @@ function animate() {
     }
     if (!reforming) particleSystem.rotation.y += 0.001 * rotSpeed;
 
+    // Voice-controlled continuous spin
+    if (voiceSpinActive) {
+      particleSystem.rotation.y += voiceSpinSpeed * rotSpeed;
+    }
+
     // Disco = audio-driven rotation
     if (cheats.disco && audioEnabled) {
       particleSystem.rotation.y += audio.mid * 0.05 * rotSpeed;
@@ -1175,9 +1284,14 @@ function animate() {
     }
   }
 
+  // Two-hand resize: smooth scale transition
+  const _targetScale = new THREE.Vector3(currentScale, currentScale, currentScale);
+  particleSystem.scale.lerp(_targetScale, 0.1);
+
   composer.render();
   updateFPS();
   updateInputIndicators();
+  updateDrawHUD();
 }
 
 // ─── RESIZE ───
@@ -1186,6 +1300,78 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ─── VOICE COMMAND HANDLER ───
+const speech = new SpeechController({
+  onCommand: (action) => {
+    switch (action) {
+      case 'resetScale':
+        currentScale = 1.0;
+        break;
+      case 'clearDrawing':
+        if (drawingSystem) drawingSystem.clear();
+        break;
+      case 'undoDrawing':
+        if (drawingSystem) drawingSystem.undo();
+        break;
+      case 'toggleDraw':
+        drawMode = true;
+        updateHUD();
+        break;
+      case 'stopDraw':
+        drawMode = false;
+        if (drawingSystem && drawingSystem.isDrawing) drawingSystem.endStroke();
+        updateHUD();
+        break;
+      case 'flip90':
+        particleSystem.rotation.z += Math.PI / 2;
+        break;
+      case 'flip180':
+        particleSystem.rotation.z += Math.PI;
+        break;
+      case 'flip45':
+        particleSystem.rotation.z += Math.PI / 4;
+        break;
+      case 'flipX':
+        particleSystem.rotation.x += Math.PI / 2;
+        break;
+      case 'flipY':
+        particleSystem.rotation.y += Math.PI / 2;
+        break;
+      case 'startSpin':
+        voiceSpinActive = true;
+        break;
+      case 'stopSpin':
+        voiceSpinActive = false;
+        break;
+      case 'spinFaster':
+        voiceSpinSpeed = Math.min(voiceSpinSpeed * 2, 0.2);
+        break;
+      case 'spinSlower':
+        voiceSpinSpeed = Math.max(voiceSpinSpeed * 0.5, 0.002);
+        break;
+      case 'softMode':
+        softMode = true;
+        break;
+      case 'hardMode':
+        softMode = false;
+        break;
+      case 'scatterParticles':
+        triggerBurst();
+        break;
+      case 'reassembleParticles':
+        reforming = true;
+        reformTimer = 0;
+        break;
+      case 'decreaseGravity':
+        // Reduce particle expansion to simulate lighter feel
+        particleExpansion = Math.max(0.5, particleExpansion - 0.3);
+        break;
+      default:
+        break;
+    }
+  }
 });
 
 // ─── START ───

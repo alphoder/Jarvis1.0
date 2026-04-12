@@ -68,6 +68,23 @@ class SpeechController {
       { keywords: ['increase gravity', 'more gravity'], action: 'increaseGravity' },
       { keywords: ['scatter particles', 'explode particles'], action: 'scatterParticles' },
       { keywords: ['reassemble particles', 'gather particles'], action: 'reassembleParticles' },
+      { keywords: ['reset scale', 'normal size', 'original size'], action: 'resetScale' },
+      { keywords: ['clear drawing', 'erase drawing', 'erase lines', 'clear lines'], action: 'clearDrawing' },
+      { keywords: ['undo drawing', 'undo line', 'undo stroke', 'undo'], action: 'undoDrawing' },
+      { keywords: ['draw mode', 'toggle draw', 'start drawing', 'drawing mode'], action: 'toggleDraw' },
+      { keywords: ['stop drawing', 'exit draw', 'end drawing'], action: 'stopDraw' },
+      { keywords: ['flip 90', 'rotate 90', 'flip ninety'], action: 'flip90' },
+      { keywords: ['flip 180', 'rotate 180', 'flip one eighty'], action: 'flip180' },
+      { keywords: ['flip 45', 'rotate 45', 'flip forty five'], action: 'flip45' },
+      { keywords: ['spin', 'start spinning', 'rotate', 'start rotating'], action: 'startSpin' },
+      { keywords: ['stop spinning', 'stop rotating', 'stop spin'], action: 'stopSpin' },
+      { keywords: ['spin faster', 'rotate faster', 'faster'], action: 'spinFaster' },
+      { keywords: ['spin slower', 'rotate slower', 'slower'], action: 'spinSlower' },
+      { keywords: ['make it soft', 'soft mode', 'smooth'], action: 'softMode' },
+      { keywords: ['make it hard', 'sharp mode', 'crisp'], action: 'hardMode' },
+      { keywords: ['flip x', 'rotate x', 'tilt forward'], action: 'flipX' },
+      { keywords: ['flip y', 'rotate y', 'tilt side'], action: 'flipY' },
+      { keywords: ['decrease gravity', 'less gravity', 'lower gravity'], action: 'decreaseGravity' },
     ];
     for (const cmd of commands) {
       for (const kw of cmd.keywords) {

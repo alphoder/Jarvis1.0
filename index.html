@@ -998,6 +998,16 @@
           <div class="gesture-dot" id="audio-dot"></div>
           <span class="gesture-label">Audio Reactive</span>
         </div>
+        <div class="gesture-indicator">
+          <div class="gesture-dot" id="draw-dot"></div>
+          <span class="gesture-label">Draw Mode: <span id="draw-mode-status">OFF</span></span>
+        </div>
+        <div class="gesture-indicator" id="stroke-count-indicator" style="display:none;">
+          <span class="gesture-label" style="margin-left:18px;">Strokes: <span id="stroke-count">0</span></span>
+        </div>
+        <div class="gesture-indicator" id="scale-indicator" style="display:none;">
+          <span class="gesture-label" style="margin-left:18px;">Scale: <span id="scale-value">1.0x</span></span>
+        </div>
       </div>
     </div>
 
@@ -1010,6 +1020,8 @@
         <div class="control-row"><span class="key">M</span> Toggle audio reactive</div>
         <div class="control-row"><span class="key">MOUSE</span> Hover Repel / Click Attract</div>
         <div class="control-row"><span class="key">PINCH</span> Cycle shape (hand)</div>
+        <div class="control-row"><span class="key">D</span> Toggle draw mode</div>
+        <div class="control-row"><span class="key">2-PINCH</span> Resize (both hands)</div>
         <div class="control-row ni-hint"><span class="key">C</span> Neural Interface</div>
         <div class="control-row" style="margin-top:8px;border-top:1px solid rgba(100,181,246,0.1);padding-top:8px;opacity:0.4;"><span class="key">???</span> Try typing secret words...</div>
       </div>
