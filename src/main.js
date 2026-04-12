@@ -434,7 +434,7 @@ const particleSystem = new THREE.Points(geometry, shaderMaterial);
 scene.add(particleSystem);
 
 // ─── 3D DRAWING SYSTEM ───
-drawingSystem = new DrawingSystem(scene);
+let drawingSystem = new DrawingSystem(scene);
 
 // ═══════════════════════════════════════════
 //  AUDIO ENGINE — Multi-Band + Beat Detection
@@ -852,7 +852,6 @@ const MIN_SCALE = 0.3, MAX_SCALE = 3.0;
 
 // 3D Drawing state
 let drawMode = false;
-let drawingSystem = null;
 
 // Voice-controlled spin state
 let voiceSpinActive = false;
