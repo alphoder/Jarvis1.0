@@ -101,3 +101,7 @@ pids/
 *.seed
 *.pid.lock
 .vercel
+
+# Internal planning docs (kept locally, off GitHub)
+/docs/
+/.claude/
